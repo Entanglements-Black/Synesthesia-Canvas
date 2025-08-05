@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synesthesia Canvas</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111827; /* Tailwind gray-900 */
+            color: #d1d5db; /* Tailwind gray-300 */
+            font-family: 'Inter', sans-serif;
+        }
+        #info-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(17, 24, 39, 0.95);
+            text-align: center;
+            z-index: 10;
+            cursor: pointer;
+            transition: opacity 0.5s ease-out;
+        }
+        #info-overlay h1 {
+            font-size: 3rem;
+            margin: 0;
+            font-family: 'Orbitron', sans-serif;
+        }
+        #info-overlay p {
+            font-size: 1.25rem;
+            margin-top: 1rem;
+            max-width: 500px;
+        }
+        #info-overlay .click-to-start {
+            margin-top: 2rem;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border: 2px solid #a78bfa; /* Tailwind violet-400 */
+            border-radius: 0.5rem;
+            color: #a78bfa;
+            animation: pulse 2s infinite;
+        }
+        canvas {
+            display: block;
+            background-color: #111827;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        footer {
+            position: absolute;
+            bottom: 15px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6); /* Made more visible */
+            font-size: 0.9rem; /* Made larger */
+            z-index: 5; /* Above canvas, below info overlay */
+            pointer-events: none; /* Allows clicking through the footer */
+        }
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(0.98);
+            }
+        }
+        /* Add fonts for the info overlay */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Orbitron:wght@700&display=swap');
+    </style>
+</head>
+<body>
+    <div id="info-overlay">
+        <h1>Synesthesia Canvas</h1>
+        <p>Paint with your mouse to create a symphony of color and sound. The vertical position changes the pitch.</p>
+        <div class="click-to-start">Click anywhere to begin</div>
+    </div>
+    <canvas id="mainCanvas"></canvas>
+    <footer>
+        <p>&copy; 2025 Synesthesia Canvas. All Rights Reserved.</p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const infoOverlay = document.getElementById('info-overlay');
+        let isPainting = false;
+        let hue = 0;
+        let lastX, lastY;
+
+        // --- Canvas Setup ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = 10;
+        }
+
+        // --- Audio Setup (Tone.js) ---
+        // Create a synth with a nice reverb effect
+        const reverb = new Tone.Reverb({
+            decay: 4,
+            preDelay: 0.01,
+            wet: 0.6
+        }).toDestination();
+
+        const synth = new Tone.Synth({
+            oscillator: {
+                type: 'triangle8' // A softer, more pleasant oscillator type
+            },
+            envelope: {
+                attack: 0.02,
+                decay: 0.1,
+                sustain: 0.3,
+                release: 1
+            }
+        }).connect(reverb);
+
+        // --- Drawing Logic ---
+        function startPainting(e) {
+            isPainting = true;
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+            playSound(e.clientY);
+        }
+
+        function stopPainting() {
+            isPainting = false;
+        }
+
+        function draw(e) {
+            if (!isPainting) return;
+
+            ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+            hue = (hue + 1) % 360; // Cycle through colors
+
+            // Play sound based on vertical position
+            playSound(e.clientY);
+        }
+
+        // --- Sound Logic ---
+        function playSound(yPosition) {
+            // Map the Y position to a musical frequency.
+            // Using a pentatonic scale for more pleasing results.
+            const scale = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+            const height = window.innerHeight;
+            
+            // Invert Y so that top is high pitch and bottom is low pitch
+            const invertedY = height - yPosition;
+            const index = Math.floor((invertedY / height) * scale.length);
+            const note = scale[Math.min(index, scale.length - 1)];
+
+            // Trigger the note
+            synth.triggerAttackRelease(note, '8n'); // '8n' is an eighth note duration
+        }
+        
+        // --- Event Listeners ---
+        canvas.addEventListener('mousedown', startPainting);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopPainting);
+        canvas.addEventListener('mouseout', stopPainting); // Stop if mouse leaves canvas
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- Initialization ---
+        function init() {
+            // Start Tone.js audio context on user interaction
+            Tone.start();
+            infoOverlay.style.opacity = '0';
+            setTimeout(() => {
+                infoOverlay.style.display = 'none';
+            }, 500); // Wait for fade out to finish
+            resizeCanvas();
+        }
+
+        infoOverlay.addEventListener('click', init, { once: true });
+    </script>
+</body>
+</html>
